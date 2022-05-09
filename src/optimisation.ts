@@ -1,4 +1,4 @@
-import { hasPreference, topPreference, removePreference, morePreferredOf } from "./entity";
+import { hasPreference, topPreference, removePreference, getSuccessors } from "./entity";
 import {
     createRegistry,
     allAssigned,
@@ -9,21 +9,12 @@ import {
     getLeastPreferredChoice,
     isOverThreshold,
     isFull,
+    isUnderSubscribed,
+    checkAvailable,
+    isElseAssigned,
 } from "./registry";
 
 import type { Registry, Entity, Optimisation, Matching } from "./types";
-
-/*
- * 0. Assign all applicants to be unmatched, and all courses to be totally unsubscribed.
- * 1. Take any unmatched applicant with a non-empty preference list, a, and consider their most
- * 	  preferred course, c. Match them to one another.
- * 2. If, as a result of this new matching, h is now over-subscribed, find the least preferred
- *    applicant currently assigned to c, a'.
- *    Set a' to be unmatched and remove them from the course's matching. Go to 3.
- * 3. If c is at capacity (fully subscribed) then find their worst current match a'.
- *    Then, for each successor, s, to r' in the preference list of c, delete the pair (s, c) from the game. Go to 4.
- * 4. Go to 1 until there are no such applicants left, then end.
- */
 
 /**
  * For each entity, if it is not matched and has an applicant, engage it with the top applicant. If the
@@ -34,37 +25,65 @@ import type { Registry, Entity, Optimisation, Matching } from "./types";
  * @param {Optimisation}  - entityBook: An array of entities.
  * @returns The matching of the entity book.
  */
-export const rothShapley = ({ courses: entityBook }: Optimisation): Matching => {
-    const optimisation = (registry: Registry, entities: Entity[]): void => {
-        entities.forEach((entity) => {
-            if (isNotMatched(registry, entity) && hasPreference(entity)) {
-                const candidate = topPreference(entity);
-                engage(registry, entity, candidate);
-                if (isOverThreshold(registry, candidate)) {
-                    const leastPreferredChoice = getLeastPreferredChoice(registry, candidate);
+export const rothShapleyApplicantOptimal = ({ applicants: entities }: Optimisation): Matching => {
+    const optimisation = (_registry: Registry, _entities: Entity[]): void => {
+        _entities.forEach((applicant) => {
+            if (isNotMatched(_registry, applicant) && hasPreference(applicant)) {
+                const course = topPreference(applicant);
+                engage(_registry, applicant, course);
+                if (isOverThreshold(_registry, course)) {
+                    const leastPreferredChoice = getLeastPreferredChoice(_registry, course);
                     if (leastPreferredChoice !== null) {
-                        disengage(registry, leastPreferredChoice, candidate);
+                        disengage(_registry, leastPreferredChoice, course);
                     }
                 }
 
-                if (isFull(registry, candidate)) {
-                    const leastPreferredChoice = getLeastPreferredChoice(registry, candidate);
+                if (isFull(_registry, course)) {
+                    const leastPreferredChoice = getLeastPreferredChoice(_registry, course);
                     if (leastPreferredChoice !== null) {
-                        const successors = morePreferredOf(candidate, leastPreferredChoice);
+                        const successors = getSuccessors(course, leastPreferredChoice);
                         successors.forEach((successor) => {
-                            removePreference(successor, candidate);
-                            removePreference(candidate, successor);
+                            removePreference(successor, course);
+                            removePreference(course, successor);
                         });
                     }
                 }
             }
         });
 
-        if (!allAssigned(registry, entities)) {
-            return optimisation(registry, entities);
+        if (!allAssigned(_registry, _entities)) {
+            return optimisation(_registry, _entities);
         }
     };
-    const registration = createRegistry();
-    optimisation(registration, entityBook);
-    return extractMatching(registration);
+    const registry = createRegistry();
+    optimisation(registry, entities);
+    return extractMatching(registry);
+};
+
+export const rothShapleyCourseOptimal = ({ courses: entities }: Optimisation): Matching => {
+    const optimisation = (_registry: Registry, _entities: Entity[]): void => {
+        _entities.forEach((course) => {
+            if (isUnderSubscribed(_registry, course) && checkAvailable(_registry, course)) {
+                const applicant = topPreference(course);
+
+                if (isElseAssigned(_registry, course, applicant)) {
+                    disengage(_registry, course, applicant);
+                }
+                engage(_registry, course, applicant);
+
+                const successors = getSuccessors(applicant, course);
+                successors.forEach((successor) => {
+                    removePreference(successor, applicant);
+                    removePreference(applicant, successor);
+                });
+            }
+        });
+        if (!allAssigned(_registry, _entities)) {
+            return optimisation(_registry, _entities);
+        }
+    };
+
+    const registry = createRegistry();
+    optimisation(registry, entities);
+    return extractMatching(registry);
 };

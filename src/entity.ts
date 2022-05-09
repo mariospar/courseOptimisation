@@ -5,8 +5,8 @@ import type { Entity } from "./types";
  *
  * @param {Entity}  - name: The name of the Course.
  */
-export const print = ({ name, preferences: applicants, capacity }: Entity): string =>
-    `${name}${capacity > 1 ? ` (capacity=${capacity})` : ""} prefers: ${applicants
+export const print = ({ name, preferences, capacity }: Entity): string =>
+    `${name}${capacity > 1 ? ` (capacity=${capacity})` : ""} prefers: ${preferences
         .map(({ name: nameValue }) => nameValue)
         .join(", ")}`;
 /**
@@ -94,7 +94,7 @@ export const nextPreference = (entity: Entity): Entity | null => {
  * @param {Entity}  - `preferences` is an array of entities.
  * @param {Entity} preference - The entity that is preferred.
  */
-export const morePreferredOf = ({ preferences }: Entity, preference: Entity): Entity[] =>
+export const getSuccessors = ({ preferences }: Entity, preference: Entity): Entity[] =>
     preferences.slice(1 + preferences.indexOf(preference));
 
 /**
