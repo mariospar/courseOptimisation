@@ -3,7 +3,7 @@ import { rank, hasPreference } from "./entity";
  * A Registry stores the list of applicants who have been accepted in a BEST Course
  */
 
-import type { Registry, Entity, Matching } from "./types";
+import type { Registry, Entity, Matching } from "../types";
 
 /**
  * Create an empty registry
@@ -17,16 +17,16 @@ export const createRegistry = (): Registry => ({});
  * @param {Entity} course - Entity
  * @param {Entity} applicant - The applicant who is applying to the course.
  */
-export const engage = (registry: Registry, course: Entity, applicant: Entity): void => {
-    if (!registry.hasOwnProperty(course.name)) {
-        registry[course.name] = [];
-    }
-    if (!registry.hasOwnProperty(applicant.name)) {
-        registry[applicant.name] = [];
-    }
+export const engage = (
+  registry: Registry,
+  course: Entity,
+  applicant: Entity
+): void => {
+  if (!registry[course.name]) registry[course.name] = [];
+  if (!registry[applicant.name]) registry[applicant.name] = [];
 
-    registry[course.name].push(applicant);
-    registry[applicant.name].push(course);
+  registry[course.name].push(applicant);
+  registry[applicant.name].push(course);
 };
 
 /**
@@ -36,12 +36,15 @@ export const engage = (registry: Registry, course: Entity, applicant: Entity): v
  * @param {Entity} course - The course that the applicant is applying to.
  * @param {Entity} applicant - The applicant who is disengaging from the course.
  */
-export const disengage = (registry: Registry, course: Entity, applicant: Entity): void => {
-    const indexOfApplicant = registry[course.name]?.indexOf(applicant);
-    const indexOfCourse = registry[applicant.name]?.indexOf(course);
-
-    registry[course.name]?.splice(indexOfApplicant, 1);
-    registry[applicant.name]?.splice(indexOfCourse, 1);
+export const disengage = (
+  registry: Registry,
+  course: Entity,
+  applicant: Entity
+): void => {
+  registry[course.name] =
+    registry[course.name]?.filter((a) => a.name !== applicant.name) || [];
+  registry[applicant.name] =
+    registry[applicant.name]?.filter((c) => c.name !== course.name) || [];
 };
 
 /**
@@ -51,7 +54,7 @@ export const disengage = (registry: Registry, course: Entity, applicant: Entity)
  * @param {Entity} entity - The entity to be matched.
  */
 const numberOfMatches = (registry: Registry, entity: Entity): number =>
-    registry[entity.name] ? registry[entity.name].length : 0;
+  registry[entity.name] ? registry[entity.name].length : 0;
 
 /**
  * Is the number of matches for the given entity greater than the entity's capacity?
@@ -60,7 +63,7 @@ const numberOfMatches = (registry: Registry, entity: Entity): number =>
  * @param {Entity} entity - The entity that we're checking.
  */
 export const isOverThreshold = (registry: Registry, entity: Entity): boolean =>
-    numberOfMatches(registry, entity) > entity.capacity;
+  numberOfMatches(registry, entity) > entity.capacity;
 
 /**
  * Is the entity full?
@@ -69,7 +72,7 @@ export const isOverThreshold = (registry: Registry, entity: Entity): boolean =>
  * @param {Entity} entity - The entity to check.
  */
 export const isFull = (registry: Registry, entity: Entity): boolean =>
-    numberOfMatches(registry, entity) === entity.capacity;
+  (registry[entity.name]?.length || 0) >= entity.capacity;
 
 /**
  * Is there a preference of them that they are not currently assigned to?
@@ -78,7 +81,9 @@ export const isFull = (registry: Registry, entity: Entity): boolean =>
  * @param {Entity} entity - The entity that is being checked.
  */
 export const checkAvailable = (registry: Registry, entity: Entity): boolean =>
-    entity.preferences.some((preference) => !registry[entity.name]?.includes(preference))
+  entity.preferences.some(
+    (preference) => !registry[entity.name]?.includes(preference)
+  );
 
 /**
  * Returns true if the entity does not match any of the patterns in the registry
@@ -87,7 +92,7 @@ export const checkAvailable = (registry: Registry, entity: Entity): boolean =>
  * @param {Entity} entity - The entity to check.
  */
 export const isNotMatched = (registry: Registry, entity: Entity): boolean =>
-    numberOfMatches(registry, entity) === 0;
+  !registry[entity.name]?.length;
 
 /**
  * Is the number of matches less than the capacity of the entity?
@@ -95,8 +100,10 @@ export const isNotMatched = (registry: Registry, entity: Entity): boolean =>
  * @param {Registry} registry - The registry that contains the entity.
  * @param {Entity} entity - The entity we're checking.
  */
-export const isUnderSubscribed = (registry: Registry, entity: Entity): boolean =>
-    numberOfMatches(registry, entity) < entity.capacity;
+export const isUnderSubscribed = (
+  registry: Registry,
+  entity: Entity
+): boolean => numberOfMatches(registry, entity) < entity.capacity;
 
 /**
  * Given an entity, return the current match in the registry
@@ -104,8 +111,11 @@ export const isUnderSubscribed = (registry: Registry, entity: Entity): boolean =
  * @param {Registry} registry - The registry that contains the entities.
  * @param {Entity} entity - The entity to check.
  */
-export const currentMatch = (registry: Registry, entity: Entity): Entity | null =>
-    numberOfMatches(registry, entity) > 0 ? registry[entity.name][0] : null;
+export const currentMatch = (
+  registry: Registry,
+  entity: Entity
+): Entity | null =>
+  numberOfMatches(registry, entity) > 0 ? registry[entity.name][0] : null;
 
 /**
  * Find the least preferred choice for an entity
@@ -114,21 +124,23 @@ export const currentMatch = (registry: Registry, entity: Entity): Entity | null 
  * @param {Entity} entity - The entity that is being matched.
  * @returns The least preferred choice.
  */
-export const getLeastPreferredChoice = (registry: Registry, entity: Entity): Entity | null => {
-    if (isNotMatched(registry, entity)) {
-        return null;
-    }
+export const getLeastPreferredChoice = (
+  registry: Registry,
+  entity: Entity
+): Entity | null => {
+  const currentApplicants = registry[entity.name] || [];
+  let leastPreferred: Entity | null = null;
+  let maxRank = -1;
 
-    let max = -1;
-    let worst = null;
-    registry[entity.name].forEach((applicant) => {
-        const rankNumber = rank(entity, applicant);
-        if (rankNumber > max) {
-            max = rankNumber;
-            worst = applicant;
-        }
-    });
-    return worst;
+  currentApplicants.forEach((applicant) => {
+    const rank = entity.rankTable[applicant.name];
+    if (rank > maxRank) {
+      maxRank = rank;
+      leastPreferred = applicant;
+    }
+  });
+
+  return leastPreferred;
 };
 
 /**
@@ -138,11 +150,14 @@ export const getLeastPreferredChoice = (registry: Registry, entity: Entity): Ent
  * @param {Entity[]} entities - The list of entities to check.
  * @returns A boolean value.
  */
-export const allAssigned = (registry: Registry, entities: Entity[]): boolean => {
-    const unassignedApplicants = entities.filter(
-        (entity) => isNotMatched(registry, entity) && hasPreference(entity),
-    );
-    return unassignedApplicants.length === 0;
+export const allAssigned = (
+  registry: Registry,
+  entities: Entity[]
+): boolean => {
+  const unassignedApplicants = entities.filter(
+    (entity) => isNotMatched(registry, entity) && hasPreference(entity)
+  );
+  return unassignedApplicants.length === 0;
 };
 
 /**
@@ -152,8 +167,12 @@ export const allAssigned = (registry: Registry, entities: Entity[]): boolean => 
  * @param {Entity} course - The course that the applicant is applying for.
  * @param {Entity} applicant - the applicant we're checking for
  */
-export const isElseAssigned = (registry: Registry, course: Entity, applicant: Entity): boolean => {
-    return currentMatch(registry, applicant)?.name !== course.name;
+export const isElseAssigned = (
+  registry: Registry,
+  course: Entity,
+  applicant: Entity
+): boolean => {
+  return currentMatch(registry, applicant)?.name !== course.name;
 };
 
 /**
@@ -163,9 +182,10 @@ export const isElseAssigned = (registry: Registry, course: Entity, applicant: En
  * @returns A dictionary of entity names to lists of matching entity names.
  */
 export const extractMatching = (registry: Registry): Matching => {
-    const names = Object.keys(registry);
-    return names.reduce((acc: Matching, name: string) => {
-        acc[name] = registry[name].map((entity) => entity.name);
-        return acc;
-    }, {});
+  const matching: Matching = {};
+  Object.keys(registry).forEach((name) => {
+    if (registry[name][0]?.capacity) return; // Skip entities in final matching
+    matching[name] = registry[name].map((entity) => entity.name);
+  });
+  return matching;
 };

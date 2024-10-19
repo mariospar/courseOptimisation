@@ -1,5 +1,5 @@
 import { print } from "./entity";
-import type { Optimisation } from "./types";
+import type { Optimisation } from "../types";
 
 /**
  * Given an optimisation, return a string representation of the courses and applicants
@@ -7,9 +7,9 @@ import type { Optimisation } from "./types";
  * @param {Optimisation}  - courses: The courses to optimise.
  */
 export const toString = ({
-    courses: courses,
-    applicants: applicants,
+  courses: courses,
+  applicants: applicants,
 }: Optimisation): { courses: string[]; applicants: string[] } => ({
-    courses: courses.map((entity) => print(entity)),
-    applicants: applicants.map((entity) => print(entity)),
+  courses: courses.map((entity) => print(entity)),
+  applicants: applicants.map((entity) => print(entity)),
 });
