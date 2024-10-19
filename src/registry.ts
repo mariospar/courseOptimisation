@@ -48,6 +48,27 @@ export const disengage = (
 };
 
 /**
+ * Removes the applicant from the given courses's preference list and removes the course from the
+ * applicant's preference list.
+ *
+ * @param {Entity} course - The course entity.
+ * @param {Entity} applicant - The applicant entity.
+ */
+export const deletePair = (course: Entity, applicant: Entity): void => {
+  // Remove applicant from courses's preference list
+  course.preferences = course.preferences.filter(
+    (pref) => pref.name !== applicant.name
+  );
+  delete course.rankTable[applicant.name];
+
+  // Remove course from applicant's preference list
+  applicant.preferences = applicant.preferences.filter(
+    (pref) => pref.name !== course.name
+  );
+  delete applicant.rankTable[course.name];
+};
+
+/**
  * Return the number of entities in the registry that match the given entity.
  *
  * @param {Registry} registry - the registry of entities
@@ -75,15 +96,28 @@ export const isFull = (registry: Registry, entity: Entity): boolean =>
   (registry[entity.name]?.length || 0) >= entity.capacity;
 
 /**
- * Is there a preference of them that they are not currently assigned to?
+ * Check if a course is willing and able to take an applicant.
  *
- * @param {Registry} registry - Registry
- * @param {Entity} entity - The entity that is being checked.
+ * @param {Registry} registry - The current matchings.
+ * @param {Entity} course - The course entity.
+ * @returns {boolean} - True if the course can still take an unmatched applicant.
  */
-export const checkAvailable = (registry: Registry, entity: Entity): boolean =>
-  entity.preferences.some(
-    (preference) => !registry[entity.name]?.includes(preference)
+export const checkAvailable = (
+  registry: Registry,
+  course: Entity
+): boolean => {
+  // Check if the course has remaining capacity
+  if (course.capacity <= (registry[course.name]?.length || 0)) {
+    return false;
+  }
+
+  // Check if there are still unmatched applicants in its preference list
+  const unmatchedApplicants = course.preferences.filter(
+    (applicant) => !registry[course.name]?.includes(applicant)
   );
+
+  return unmatchedApplicants.length > 0;
+};
 
 /**
  * Returns true if the entity does not match any of the patterns in the registry
@@ -115,7 +149,7 @@ export const currentMatch = (
   registry: Registry,
   entity: Entity
 ): Entity | null =>
-  numberOfMatches(registry, entity) > 0 ? registry[entity.name][0] : null;
+  registry[entity.name] && registry[entity.name].length > 0 ? registry[entity.name][0] : null;
 
 /**
  * Find the least preferred choice for an entity
@@ -127,12 +161,15 @@ export const currentMatch = (
 export const getLeastPreferredChoice = (
   registry: Registry,
   entity: Entity
-): Entity | null => {
-  const currentApplicants = registry[entity.name] || [];
-  let leastPreferred: Entity | null = null;
-  let maxRank = -1;
+): Entity => {
+  const currentEntities = registry[entity.name];
 
-  currentApplicants.forEach((applicant) => {
+  // Initialize leastPreferred to the first entity in the list
+  let leastPreferred: Entity = currentEntities[0];
+  let maxRank = entity.rankTable[leastPreferred.name];
+
+  // Loop through all matched entities to find the least preferred one
+  currentEntities.forEach((applicant) => {
     const rank = entity.rankTable[applicant.name];
     if (rank > maxRank) {
       maxRank = rank;
@@ -176,16 +213,22 @@ export const isElseAssigned = (
 };
 
 /**
- * Given a registry, return a mapping of registry names to the names of entities in the registry
+ * Given a registry, return a mapping of applicant names to the names of the courses they are matched with.
  *
- * @param {Registry} registry - Registry
- * @returns A dictionary of entity names to lists of matching entity names.
+ * @param {Registry} registry - The registry that stores the current matches.
+ * @returns A dictionary of applicant names to lists of course names they are matched with.
  */
 export const extractMatching = (registry: Registry): Matching => {
   const matching: Matching = {};
-  Object.keys(registry).forEach((name) => {
-    if (registry[name][0]?.capacity) return; // Skip entities in final matching
-    matching[name] = registry[name].map((entity) => entity.name);
+
+  Object.keys(registry).forEach((entityName) => {
+    const matches = registry[entityName];
+
+    if (matches[0]?.capacity === 1) {
+      // If it's an applicant, map the entityName to the names of its matches (the courses it is assigned to)
+      matching[entityName] = matches.map((entity) => entity.name);
+    }
   });
+
   return matching;
 };

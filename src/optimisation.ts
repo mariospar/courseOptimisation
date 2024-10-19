@@ -1,25 +1,18 @@
-import {
-  hasPreference,
-  topPreference,
-  removePreference,
-  getSuccessors,
-} from "./entity";
+import { topPreference, getSuccessors } from "./entity";
 import {
   createRegistry,
-  allAssigned,
-  isNotMatched,
   engage,
   disengage,
   extractMatching,
   getLeastPreferredChoice,
-  isOverThreshold,
   isFull,
-  isUnderSubscribed,
   checkAvailable,
   isElseAssigned,
+  deletePair,
+  currentMatch,
 } from "./registry";
 
-import type { Registry, Entity, Optimisation, Matching } from "../types";
+import type { Optimisation, Matching } from "../types";
 
 /**
  * For each entity, if it is not matched and has an applicant, engage it with the top applicant. If the
@@ -31,37 +24,51 @@ import type { Registry, Entity, Optimisation, Matching } from "../types";
  * @returns The matching of the entity book.
  */
 export const rothShapleyApplicantOptimal = ({
-  applicants: entities,
+  applicants,
 }: Optimisation): Matching => {
-  let freeApplicants = [...entities];
+  const registry = {};
 
-  // Create a registry to track matches and their status
-  const registry = createRegistry();
+  // Keep track of free applicants that still need to be matched
+  let freeApplicants = [...applicants];
 
   while (freeApplicants.length > 0) {
     const applicant = freeApplicants.pop()!;
+
+    // Get the top preference of the applicant
     const preferredCourse = topPreference(applicant);
 
-    if (preferredCourse) {
-      engage(registry, applicant, preferredCourse);
+    // Check if the course is full
+    if (isFull(registry, preferredCourse)) {
+      // If so, find the least preferred applicant in the course
+      const leastPreferred = getLeastPreferredChoice(registry, preferredCourse);
 
-      if (isFull(registry, preferredCourse)) {
-        const leastPreferred = getLeastPreferredChoice(
-          registry,
-          preferredCourse
-        );
-        if (leastPreferred !== null) {
-          disengage(registry, leastPreferred, preferredCourse);
-          freeApplicants.push(leastPreferred);
+      // Remove the least preferred applicant from the course
+      disengage(registry, preferredCourse, leastPreferred);
 
-          // Remove all successors of the least preferred choice from the course's preferences
-          const successors = getSuccessors(preferredCourse, leastPreferred);
-          successors.forEach((successor) => {
-            removePreference(successor, preferredCourse);
-            removePreference(preferredCourse, successor);
-          });
+      // Add the removed applicant back to the free pool to reattempt matching
+      freeApplicants.push(leastPreferred);
+    }
+
+    // Engage applicant with their top choice course
+    engage(registry, preferredCourse, applicant);
+
+    // If the course is full, remove successors of the least preferred match
+    if (isFull(registry, preferredCourse)) {
+      const leastPreferred = getLeastPreferredChoice(registry, preferredCourse);
+      const successors = getSuccessors(preferredCourse, leastPreferred);
+
+      successors.forEach((successor) => {
+        // Remove successors from the course's preference list
+        disengage(registry, preferredCourse, successor);
+        deletePair(preferredCourse, successor);
+        // If a successor is free, remove them from the free pool
+        if (
+          !successor.preferences.length &&
+          freeApplicants.includes(successor)
+        ) {
+          freeApplicants = freeApplicants.filter((app) => app !== successor);
         }
-      }
+      });
     }
   }
 
@@ -69,34 +76,55 @@ export const rothShapleyApplicantOptimal = ({
 };
 
 export const rothShapleyCourseOptimal = ({
-  courses: entities,
+  courses,
 }: Optimisation): Matching => {
-  const optimisation = (_registry: Registry, _entities: Entity[]): void => {
-    _entities.forEach((course) => {
+  const registry = createRegistry();
+
+  // Keep track of unmatched courses
+  let freeCourses = [...courses];
+
+  while (freeCourses.length > 0) {
+    const course = freeCourses.pop()!;
+
+    // Get the courses's most preferred applicant that is not yet matched to it
+    const preferredApplicant = topPreference(course);
+
+    // If the applicant is currently matched, unmatch them
+    const currentMatchedCourse = currentMatch(registry, preferredApplicant);
+
+    if (currentMatchedCourse && isElseAssigned(registry, course, preferredApplicant)) {
+      disengage(registry, currentMatchedCourse, preferredApplicant);
+      // Add the unmatched course back to free courses if it's now undersubscribed
+      if (!freeCourses.includes(currentMatchedCourse)) {
+        freeCourses.push(currentMatchedCourse);
+      }
+    }
+    // Match the course with its preferred applicant
+    engage(registry, course, preferredApplicant);
+
+    // Check if the course is still undersubscribed
+    if (
+      checkAvailable(registry, course) &&
+      !freeCourses.includes(course)
+    ) {
+      freeCourses.push(course);
+    }
+
+    // Remove the successors of the current applicant for the given course
+    const leastPreferred = getLeastPreferredChoice(registry, preferredApplicant);
+    const successors = getSuccessors(preferredApplicant, leastPreferred);
+    successors.forEach((successor) => {
+      deletePair(successor, preferredApplicant);
       if (
-        isUnderSubscribed(_registry, course) &&
-        checkAvailable(_registry, course)
+        !checkAvailable(registry, successor) &&
+        freeCourses.includes(successor)
       ) {
-        const applicant = topPreference(course);
-
-        if (isElseAssigned(_registry, course, applicant)) {
-          disengage(_registry, course, applicant);
-        }
-        engage(_registry, course, applicant);
-
-        const successors = getSuccessors(applicant, course);
-        successors.forEach((successor) => {
-          removePreference(successor, applicant);
-          removePreference(applicant, successor);
-        });
+        freeCourses = freeCourses.filter(
+          (course) => course !== successor
+        );
       }
     });
-    if (!allAssigned(_registry, _entities)) {
-      return optimisation(_registry, _entities);
-    }
-  };
+  }
 
-  const registry = createRegistry();
-  optimisation(registry, entities);
   return extractMatching(registry);
 };
