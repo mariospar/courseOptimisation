@@ -92,15 +92,15 @@ export const rothShapleyCourseOptimal = ({
     // If the applicant is currently matched, unmatch them
     const currentMatchedCourse = currentMatch(registry, preferredApplicant);
 
-    if (currentMatchedCourse && isElseAssigned(registry, course, preferredApplicant)) {
+    if (currentMatchedCourse && currentMatchedCourse.name !== course.name) {
       disengage(registry, currentMatchedCourse, preferredApplicant);
       // Add the unmatched course back to free courses if it's now undersubscribed
       if (!freeCourses.includes(currentMatchedCourse)) {
         freeCourses.push(currentMatchedCourse);
       }
+      // Match the course with its preferred applicant
+      engage(registry, course, preferredApplicant);
     }
-    // Match the course with its preferred applicant
-    engage(registry, course, preferredApplicant);
 
     // Check if the course is still undersubscribed
     if (
@@ -111,8 +111,7 @@ export const rothShapleyCourseOptimal = ({
     }
 
     // Remove the successors of the current applicant for the given course
-    const leastPreferred = getLeastPreferredChoice(registry, preferredApplicant);
-    const successors = getSuccessors(preferredApplicant, leastPreferred);
+    const successors = getSuccessors(preferredApplicant, course);
     successors.forEach((successor) => {
       deletePair(successor, preferredApplicant);
       if (
