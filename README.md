@@ -68,7 +68,7 @@ The underlying structure of this work is rooted in the Gale-Shapley algorithm, a
 
 ### Usage
 
-The can create a new problem in the format that its been used in `problem.ts` and choose which of the 2 algorithms you want to use in `index.ts`
+The can create a new problem in the format that its been used in `index.ts` and choose which of the 2 algorithms you want to use, in the same file.
 
 Then just run:
 
